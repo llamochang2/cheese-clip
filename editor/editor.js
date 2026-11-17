@@ -792,7 +792,7 @@
     $('expFps').value = S.tracks.some(t => !t.isGif && t.meta.video.fps >= 50) ? '60' : '30';
     const cfg = await chrome.storage.sync.get(globalThis.CHZZK_CLIP_DEFAULTS).catch(() => globalThis.CHZZK_CLIP_DEFAULTS);
     $('gifWidth').value = String([320, 480, 640, 720, 850, 1280, 1920].includes(+cfg.width) ? cfg.width : 480);
-    $('gifFps').value = String([8, 10, 12, 15, 20, 24].includes(+cfg.fps) ? cfg.fps : 12);
+    $('gifFps').value = String([8, 10, 12, 15, 20, 24, 30].includes(+cfg.fps) ? cfg.fps : 12);
     $('gifQ').value = String(Math.min(1, Math.max(0.5, Number(cfg.quality) || 0.8)));
     $('gifSpeed').value = '1';
     $('expQuality').value = ['normal', 'high', 'best'].includes(cfg.videoQuality) ? cfg.videoQuality : 'high';
