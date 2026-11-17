@@ -101,6 +101,7 @@ main {
           background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; border-radius: 0; padding: 4px 12px; background: transparent; color: var(--muted); }
+.seg[hidden] { display: none; }
 .seg button.on { background: var(--accent); color: #0b0b0d; font-weight: 600; }
 .outbar .opts { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .outbar .opts[hidden] { display: none !important; }

@@ -214,6 +214,22 @@
   // 크롭 영역의 가로/세로 비율 (16:9 틀 기준)
   const cropAspect = c => (c.w * 16) / (c.h * 9);
   const even = v => Math.max(2, Math.round(v / 2) * 2);
+  // 결과 크기 [W, H]
+  //   kind 'mp4': base = 화질(세로), 'webp': base = 가로
+  //   fit   : 고른 크기에 맞춤 (잘라낸 부분을 확대)
+  //   native: 고른 크기의 전체 화면에서 잘라낸 부분만큼 (확대 없음)
+  function outSize(kind, base, cropIn, native) {
+    const c = normCrop(cropIn), a = cropAspect(c);
+    let W, H;
+    if (kind === 'mp4') {
+      H = native ? base * c.h : base; W = H * a;
+      if (W > 3840) { W = 3840; H = W / a; } // 압축기 한계
+    } else {
+      W = native ? base * c.w : base; H = W / a;
+    }
+    const k = Math.max(1, 64 / Math.min(W, H)); // 너무 작으면 압축기가 거부
+    return [even(W * k), even(H * k)];
+  }
 
   function makeFramePainter(tracks, segments, W, H, cropIn) {
     const crop = normCrop(cropIn);
@@ -251,8 +267,10 @@
   }
 
   // ── 출력 인코더 선택 ──
-  async function pickVideoEncoder(w, h, fps, quality) {
-    const bitrate = root.CHZZK_VIDEO_BITRATE(h, fps, quality);
+  // baseH: 고른 화질. 결과가 그보다 작으면(잘라낸 크기) 화소 수만큼 비트레이트를 줄임
+  async function pickVideoEncoder(w, h, fps, quality, baseH = h) {
+    const full = baseH * baseH * 16 / 9;
+    const bitrate = Math.max(300000, Math.round(root.CHZZK_VIDEO_BITRATE(baseH, fps, quality) * Math.min(1, (w * h) / full)));
     const list = [
       { codec: 'avc1.64002a', kind: 'avc' }, { codec: 'avc1.4d002a', kind: 'avc' },
       { codec: 'avc1.42002a', kind: 'avc' }, { codec: 'vp09.00.40.08', kind: 'vp9' }
@@ -293,10 +311,8 @@
    */
   async function exportProgram(job) {
     const { tracks, segments, inT, outT, fps } = job;
-    // 세로는 화질 그대로, 가로는 크롭 비율 (없으면 16:9)
     const crop = normCrop(job.crop);
-    let H = even(job.height), W = even(H * cropAspect(crop));
-    if (W > 3840) { W = 3840; H = even(W / cropAspect(crop)); } // 압축기 한계
+    const [W, H] = outSize('mp4', job.height, crop, job.cropNative);
     const dur = outT - inT;
     const nFrames = Math.max(1, Math.round(dur * fps));
     const report = (p, text) => job.onProgress && job.onProgress(Math.max(0, Math.min(1, p)), text);
@@ -340,7 +356,7 @@
     }
 
     // ── 인코더 준비 ──
-    const venc0 = await pickVideoEncoder(W, H, fps, job.quality);
+    const venc0 = await pickVideoEncoder(W, H, fps, job.quality, job.height);
 
     let aenc = null, aChunks = [], aDesc = null, aErr = null, aKind = null;
     if (audioOut) {
@@ -476,10 +492,8 @@
    */
   async function exportWebp(job) {
     const { tracks, segments, inT, outT, fps } = job;
-    // 가로는 그대로, 세로는 크롭 비율 (없으면 16:9)
     const crop = normCrop(job.crop);
-    const W = even(job.width);
-    const H = even(W / cropAspect(crop));
+    const [W, H] = outSize('webp', job.width, crop, job.cropNative);
     const speed = job.speed > 0 ? job.speed : 1; // 배속: 원본에서 speed/fps 초 간격으로 장면을 뽑아 1/fps 초씩 보여 줌
     const dur = outT - inT;
     const nFrames = Math.max(2, Math.round(dur / speed * fps));
@@ -598,5 +612,5 @@
     }
   }
 
-  root.ChzzkExport = { exportProgram, exportWebp, decodeTrackAudio, saveOutput, preparePermission, TrackDecoder, GifTrackDecoder, OUT_RATE };
+  root.ChzzkExport = { outSize, exportProgram, exportWebp, decodeTrackAudio, saveOutput, preparePermission, TrackDecoder, GifTrackDecoder, OUT_RATE };
 })(globalThis);

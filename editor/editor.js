@@ -738,10 +738,20 @@
   }
   // 결과 크기 (export.js와 같은 계산)
   function outSizeText() {
-    const even = v => Math.max(2, Math.round(v / 2) * 2), a = cropAspectNow();
-    if (isGifFormat()) { const w = even(Number($('gifWidth').value)); return `${w}×${even(w / a)}`; }
-    const h = even(Number($('expHeight').value)); return `${even(h * a)}×${h}`;
+    const gif = isGifFormat();
+    return X.outSize(gif ? 'webp' : 'mp4', Number($(gif ? 'gifWidth' : 'expHeight').value), S.crop, cropNative()).join('×');
   }
+  // 자른 화면의 결과 크기: 잘라낸 크기 그대로(확대 없음) / 고른 크기에 맞춤
+  let cropSizeMode = 'native';
+  const cropNative = () => !!S.crop && cropSizeMode === 'native';
+  function setCropSize(m) {
+    cropSizeMode = m;
+    $('cropNative').classList.toggle('on', m === 'native');
+    $('cropFit').classList.toggle('on', m === 'fit');
+    refreshExportForm();
+  }
+  $('cropNative').addEventListener('click', () => setCropSize('native'));
+  $('cropFit').addEventListener('click', () => setCropSize('fit'));
   // 형식별 입력 칸, 결과 길이, 예상 용량
   function setMode(m) {
     outMode = m;
@@ -752,6 +762,7 @@
   function refreshExportForm() {
     const gif = isGifFormat();
     $('mp4Opts').hidden = gif; $('gifOpts').hidden = !gif;
+    $('cropSize').hidden = !S.crop;
     $('gifQOut').textContent = Number($('gifQ').value).toFixed(2);
     const dur = Math.max(0, S.outT - S.inT);
     const sp = gifSpeed();
@@ -861,8 +872,8 @@
     try {
       const common = { tracks: S.tracks, segments: segs, inT: S.inT, outT: S.outT, signal: exportSignal, onProgress };
       const res = gif
-        ? await X.exportWebp({ ...common, crop: S.crop, width: Number($('gifWidth').value), fps: Number($('gifFps').value), quality: Number($('gifQ').value), speed: gifSpeed() })
-        : await X.exportProgram({ ...common, crop: S.crop, height: Number($('expHeight').value), fps: Number($('expFps').value), quality: $('expQuality').value });
+        ? await X.exportWebp({ ...common, crop: S.crop, cropNative: cropNative(), width: Number($('gifWidth').value), fps: Number($('gifFps').value), quality: Number($('gifQ').value), speed: gifSpeed() })
+        : await X.exportProgram({ ...common, crop: S.crop, cropNative: cropNative(), height: Number($('expHeight').value), fps: Number($('expFps').value), quality: $('expQuality').value });
       $('expStep').textContent = '저장 중…';
       const tr0 = S.tracks[0];
       const saved = await X.saveOutput(res.blob, outputName(segs), TRIM ? { streamer: tr0.name, channelId: tr0.meta.channelId, sub: broadcastFolder(tr0) } : undefined);
