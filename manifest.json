@@ -1,0 +1,96 @@
+{
+  "manifest_version": 3,
+  "name": "cheese-clip",
+  "version": "1.20.1",
+  "description": "치지직 방송을 단축키로 WebP·MP4로 저장합니다. 비공식 개인 감상용 도구입니다.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "storage",
+    "downloads",
+    "offscreen"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "cheese-clip",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "settings/options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "save-clip": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "WebP 저장"
+    },
+    "save-video": {
+      "suggested_key": {
+        "default": "Alt+Shift+V"
+      },
+      "description": "영상(MP4) 저장"
+    },
+    "save-all-videos": {
+      "suggested_key": {
+        "default": "Alt+Shift+D"
+      },
+      "description": "모든 탭 영상 동시 저장"
+    },
+    "open-editor": {
+      "suggested_key": {
+        "default": "Alt+Shift+E"
+      },
+      "description": "교차편집 열기"
+    },
+    "trim-clip": {
+      "description": "편집 열기"
+    },
+    "record-toggle": {
+      "description": "녹화 시작/종료"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chzzk.naver.com/*"
+      ],
+      "js": [
+        "content/mute-guard.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://chzzk.naver.com/*"
+      ],
+      "js": [
+        "shared/defaults.js",
+        "shared/channels.js",
+        "content/selectors.js",
+        "content/webp-mux.js",
+        "content/mp4-mux.js",
+        "content/content.js",
+        "shared/yuv.js",
+        "content/video-clip.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+  }
+}
