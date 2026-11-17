@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "cheese-clip",
-  "version": "1.21.1",
+  "version": "1.22.0",
   "description": "치지직 방송을 단축키로 WebP·MP4로 저장합니다. 비공식 개인 감상용 도구입니다.",
   "minimum_chrome_version": "116",
   "permissions": [
@@ -33,29 +33,29 @@
   "commands": {
     "save-clip": {
       "suggested_key": {
-        "default": "Alt+Shift+S"
+        "default": "Ctrl+Shift+S"
       },
       "description": "WebP 저장"
     },
     "save-video": {
       "suggested_key": {
-        "default": "Alt+Shift+V"
+        "default": "Ctrl+Shift+F"
       },
       "description": "영상(MP4) 저장"
     },
     "save-all-videos": {
-      "suggested_key": {
-        "default": "Alt+Shift+D"
-      },
       "description": "모든 탭 영상 동시 저장"
     },
     "open-editor": {
       "suggested_key": {
-        "default": "Alt+Shift+E"
+        "default": "Ctrl+Shift+X"
       },
       "description": "교차편집 열기"
     },
     "trim-clip": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E"
+      },
       "description": "편집 열기"
     },
     "record-toggle": {

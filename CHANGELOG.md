@@ -1,5 +1,9 @@
 # 변경 기록
 
+## 1.22.0
+- 기본 단축키 변경: WebP 저장 Ctrl+Shift+S, 영상 저장 Ctrl+Shift+F, 편집 Ctrl+Shift+E, 교차편집 Ctrl+Shift+X
+- 녹화와 모든 탭 동시 저장은 기본 키 없음 (설정 → 단축키에서 지정)
+
 ## 1.21.1
 - WebP: 30 fps 추가 (설정, 편집 화면)
 
