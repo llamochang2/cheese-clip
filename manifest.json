@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "cheese-clip",
-  "version": "1.24.1",
+  "version": "1.24.2",
   "description": "치지직 방송을 단축키로 WebP·MP4로 저장합니다. 비공식 개인 감상용 도구입니다.",
   "minimum_chrome_version": "116",
   "permissions": [

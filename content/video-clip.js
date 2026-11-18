@@ -63,7 +63,7 @@
       videoHeight: [480, 720, 1080].includes(+s.videoHeight) ? +s.videoHeight : DEFAULTS.videoHeight,
       videoFps: [30, 60].includes(+s.videoFps) ? +s.videoFps : DEFAULTS.videoFps,
       videoQuality: ['normal', 'high', 'best'].includes(s.videoQuality) ? s.videoQuality : DEFAULTS.videoQuality,
-      audioSyncMs: Math.round(clamp(s.audioSyncMs, -300, 300, 0))
+      audioSyncMs: Math.round(clamp(s.audioSyncMs, -2000, 2000, 0))
     };
   }
 

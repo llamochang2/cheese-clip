@@ -985,16 +985,18 @@
     input.setAttribute('aria-label', '소리 싱크(ms)');
     input.addEventListener('keydown', e => e.stopPropagation());
     input.addEventListener('change', () => set(Number(input.value) || 0));
-    box.append('소리 싱크 ', mk('−', -50, '소리를 0.05초 앞으로'), input, ' ms ', mk('+', 50, '소리를 0.05초 뒤로'));
+    box.append('소리 싱크 ', mk('−0.5초', -500, '소리를 0.5초 앞으로'), mk('−', -50, '소리를 0.05초 앞으로'), input, ' ms ', mk('+', 50, '소리를 0.05초 뒤로'), mk('+0.5초', 500, '소리를 0.5초 뒤로'));
     const hint = document.createElement('div');
     hint.className = 'syncHint';
     hint.textContent = '소리가 빠르면 +, 느리면 −';
     box.after(hint);
     tr.a0 = tr.a;
     tr.audioShiftMs = 0;
+    const SYNC_MAX_MS = 5000;
+    input.min = String(-SYNC_MAX_MS); input.max = String(SYNC_MAX_MS);
     let timer = null;
     function set(ms) {
-      ms = Math.max(-2000, Math.min(2000, Math.round(ms / 10) * 10));
+      ms = Math.max(-SYNC_MAX_MS, Math.min(SYNC_MAX_MS, Math.round(ms / 10) * 10));
       tr.audioShiftMs = ms;
       input.value = String(ms);
       clearTimeout(timer);
