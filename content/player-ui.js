@@ -49,6 +49,8 @@
   const keyLabel = code => !code ? '' : code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, '숫자판 ');
   const ICON_SHOT = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.4-2h5.8l1.4 2h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="12.8" r="3.4"/></svg>';
   const ICON_REC = '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.9"/><circle class="dot" cx="12" cy="12" r="3.6" fill="currentColor"/></svg>';
+  // 치지직 버튼과 같은 말풍선 (재생바 안에서만 치지직 스타일이 적용됨)
+  const TIP = '<span class="pzp-button__tooltip pzp-button__tooltip--top"></span>';
   const STYLE = `
     .cc-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; margin: 0 4px; padding: 0;
               border: 0; border-radius: 6px; background: transparent; color: #fff; cursor: pointer; flex: none; transition: opacity .2s; }
@@ -61,10 +63,10 @@
 
   function makeButtons() {
     const s = document.createElement('button');
-    s.type = 'button'; s.className = 'cc-btn cc-shot'; s.innerHTML = ICON_SHOT;
+    s.type = 'button'; s.className = 'cc-btn cc-shot'; s.innerHTML = ICON_SHOT + TIP;
     s.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); shot(); });
     const r = document.createElement('button');
-    r.type = 'button'; r.className = 'cc-btn cc-rec'; r.innerHTML = ICON_REC;
+    r.type = 'button'; r.className = 'cc-btn cc-rec'; r.innerHTML = ICON_REC + TIP;
     r.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); rec(); setTimeout(paint, 200); });
     return [s, r];
   }
@@ -76,11 +78,17 @@
     if (!btns) return;
     const [s, r] = btns;
     const k1 = keyLabel(cfg.pageKeyShot), k2 = keyLabel(cfg.pageKeyRec);
-    s.title = s.ariaLabel = '스크린샷' + (k1 ? ` (${k1})` : '');
-    r.hidden = !videoOn();
     const on = recording();
+    r.hidden = !videoOn();
     r.classList.toggle('on', on);
-    r.title = r.ariaLabel = (on ? '녹화 종료' : '녹화 시작') + (k2 ? ` (${k2})` : '');
+    const bar = !float;
+    for (const [b, text] of [[s, '스크린샷' + (k1 ? ` (${k1})` : '')], [r, (on ? '녹화 종료' : '녹화 시작') + (k2 ? ` (${k2})` : '')]]) {
+      b.ariaLabel = text;
+      b.classList.toggle('pzp-button', bar);
+      const tip = b.querySelector('.pzp-button__tooltip');
+      if (tip.textContent !== text) tip.textContent = text;
+      if (bar) b.removeAttribute('title'); else b.title = text;
+    }
   }
 
   // 재생바 찾기: 치지직 플레이어(pzp)의 오른쪽 버튼 묶음 → 없으면 전체화면 버튼이 있는 줄
@@ -114,7 +122,8 @@
       host.attachShadow({ mode: 'open' }).innerHTML = `<style>${STYLE}
         .wrap { position: fixed; z-index: 2147483646; display: flex; gap: 4px; padding: 2px; border-radius: 22px;
                 background: rgba(0,0,0,.55); opacity: 0; transition: opacity .2s; pointer-events: none; }
-        .wrap.show { opacity: 1; pointer-events: auto; }</style><div class="wrap"></div>`;
+        .wrap.show { opacity: 1; pointer-events: auto; }
+        .pzp-button__tooltip { display: none; }</style><div class="wrap"></div>`;
       if (btns) btns.forEach(b => b.remove());
       btns = makeButtons();
       host.shadowRoot.querySelector('.wrap').append(...btns);

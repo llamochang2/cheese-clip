@@ -24,7 +24,8 @@ globalThis.CHZZK_CLIP_DEFAULTS = Object.freeze({
   // ── 치지직 화면 안 조작 ──
   pageKeyShot: 'KeyS',  // 키 하나 단축키 (KeyboardEvent.code, ''이면 끔)
   pageKeyRec: 'KeyR',
-  playerButtons: true   // 재생바에 스크린샷·녹화 버튼
+  playerButtons: true,  // 재생바에 스크린샷·녹화 버튼
+  lockQuality: true     // WebP·영상을 켠 채널에서 플레이어 화질을 1080p로 고정
 });
 
 globalThis.CHZZK_CLIP_CONST = Object.freeze({

@@ -189,6 +189,8 @@
     flashSaved();
     renderPageKeys();
   }, true);
+  chrome.storage.sync.get({ lockQuality: DEFAULTS.lockQuality }).then(s => { $('lockQuality').checked = !!s.lockQuality; });
+  $('lockQuality').addEventListener('change', async () => { await chrome.storage.sync.set({ lockQuality: $('lockQuality').checked }); flashSaved(); });
   $('playerButtons').addEventListener('change', async () => { await chrome.storage.sync.set({ playerButtons: $('playerButtons').checked }); flashSaved(); });
 
   $('changeShortcut').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
