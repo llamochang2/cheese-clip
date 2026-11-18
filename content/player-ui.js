@@ -50,13 +50,13 @@
   const ICON_REC = '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.9"/><circle class="dot" cx="12" cy="12" r="3.6" fill="currentColor"/></svg>';
   const STYLE = `
     .cc-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0;
-              border: 0; background: transparent; color: #fff; cursor: pointer; opacity: .9; flex: none; }
-    .cc-btn { transition: opacity .2s; }
+              border: 0; background: transparent; color: #fff; cursor: pointer; flex: none; }
     .cc-btn.on { color: #ff4d4d; }
     .cc-btn.on .dot { animation: cc-blink 1s steps(2, start) infinite; }
     @keyframes cc-blink { to { visibility: hidden; } }`;
 
   function makeButtons() {
+    shared_ = []; // 새 버튼에는 아직 클래스가 없음
     const s = document.createElement('button');
     s.type = 'button'; s.className = 'cc-btn cc-shot'; s.innerHTML = ICON_SHOT;
     s.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); shot(); });
@@ -103,30 +103,20 @@
     if (!btns) btns = makeButtons();
     if (btns[0].parentNode !== bar || bar.firstChild !== btns[0]) bar.prepend(btns[0], btns[1]);
     inBar = bar;
+    adoptBarClass(bar);
   }
 
-  // 재생바가 숨을 때 같이 숨기: 옆 버튼(치지직 것)의 보이는 정도를 그대로 따라감
-  //   치지직은 재생바를 숨길 때 버튼마다 따로 투명하게 만들어서, 끼워 넣은 버튼은 저절로 숨지 않음
-  let inBar = null;
-  function visibilityOf(el) {
-    let op = 1, vis = true;
-    for (const e of [el, el.firstElementChild].filter(Boolean)) {
-      const cs = getComputedStyle(e);
-      op = Math.min(op, parseFloat(cs.opacity) || 0);
-      if (cs.visibility === 'hidden' || cs.display === 'none') vis = false;
-    }
-    return vis ? op : 0;
+  // 재생바가 숨을 때 같이 숨기: 치지직 버튼들이 공통으로 쓰는 클래스를 확장 버튼에도 붙임
+  //   치지직은 재생바를 숨길 때 버튼마다 그 클래스로 투명하게 만듦
+  let inBar = null, shared_ = [];
+  function adoptBarClass(bar) {
+    const own = [...bar.children].filter(el => el.tagName === 'BUTTON' && !el.classList.contains('cc-btn'));
+    let common = own.length >= 2 ? [...own[0].classList] : [];
+    for (const el of own.slice(1)) common = common.filter(c => el.classList.contains(c));
+    if (common.join(' ') === shared_.join(' ')) return;
+    for (const b of btns) { b.classList.remove(...shared_); b.classList.add(...common); }
+    shared_ = common;
   }
-  function syncWithBar() {
-    if (!btns || !inBar || btns[0].parentNode !== inBar) return;
-    const ref = [...inBar.children].find(el => !el.classList.contains('cc-btn') && el.offsetParent !== null);
-    const op = ref ? visibilityOf(ref) : 1;
-    for (const b of btns) {
-      b.style.opacity = String(op);
-      b.style.pointerEvents = op < 0.1 ? 'none' : '';
-    }
-  }
-  setInterval(syncWithBar, 100);
 
   function placeFloating(video) {
     inBar = null;
