@@ -141,7 +141,7 @@
   async function renderKeys() {
     const names = {
       'save-clip': 'WebP 저장', 'save-video': '영상 저장', 'save-all-videos': '모든 탭 영상 동시 저장',
-      'open-editor': '교차편집 열기', 'trim-clip': '편집 열기', 'record-toggle': '녹화 시작/종료'
+      'open-editor': '교차편집 열기', 'trim-clip': '편집 열기', 'record-toggle': '녹화 시작/종료', 'screenshot': '스크린샷'
     };
     const cmds = await chrome.commands.getAll();
     const rows = cmds.filter(c => names[c.name]).map(c => {

@@ -652,6 +652,111 @@
     t.timer = setTimeout(() => el.classList.remove('show'), ms);
   }
 
+  // ── 스크린샷: 방송 화면 위에 썸네일 → 저장 / 닫기 ──
+  const SHOT_MAX = 4; // 동시에 띄우는 썸네일 수 (넘으면 오래된 것부터 닫힘)
+  let shotHost = null, shotList = null;
+  const ICON_SAVE = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>';
+  const ICON_X = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+
+  function shotLayer() {
+    if (!shotHost) {
+      shotHost = document.createElement('div');
+      shotHost.attachShadow({ mode: 'open' }).innerHTML = `
+        <style>
+          .list { position: fixed; z-index: 2147483647; display: flex; flex-direction: column; gap: 8px;
+                  font: 12px/1.4 system-ui, -apple-system, "Malgun Gothic", sans-serif; }
+          .card { position: relative; width: 240px; border-radius: 8px; overflow: hidden; background: #000;
+                  box-shadow: 0 6px 20px rgba(0,0,0,.45); outline: 2px solid rgba(255,255,255,.85);
+                  animation: pop .22s ease-out; }
+          .card img { display: block; width: 100%; }
+          .card::after { content: ''; position: absolute; inset: 0; background: #fff; opacity: 0;
+                         animation: flash .35s ease-out; pointer-events: none; }
+          .bar { position: absolute; top: 6px; right: 6px; display: flex; gap: 6px; }
+          button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0;
+                   border-radius: 50%; cursor: pointer; color: #fff; background: rgba(0,0,0,.65); }
+          button:hover { background: rgba(0,0,0,.85); }
+          button.save { color: #0b0b0d; background: #00ffa3; }
+          button.save:hover { background: #33ffb8; }
+          button:disabled { opacity: .6; cursor: default; }
+          .info { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 8px; color: #fff;
+                  background: linear-gradient(transparent, rgba(0,0,0,.75)); }
+          .card.done { outline-color: #00ffa3; }
+          @keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(.97); } }
+          @keyframes flash { from { opacity: .8; } to { opacity: 0; } }
+        </style>
+        <div class="list"></div>`;
+      shotList = shotHost.shadowRoot.querySelector('.list');
+      window.addEventListener('resize', placeShots);
+      document.addEventListener('fullscreenchange', placeShots);
+    }
+    const parent = document.fullscreenElement || document.body || document.documentElement;
+    if (shotHost.parentNode !== parent) parent.appendChild(shotHost);
+    return shotList;
+  }
+  // 영상 오른쪽 위에 붙임
+  function placeShots() {
+    if (!shotList) return;
+    if (!shotList.children.length) { shotHost.remove(); return; }
+    const parent = document.fullscreenElement || document.body || document.documentElement;
+    if (shotHost.parentNode !== parent) parent.appendChild(shotHost);
+    const r = video && video.isConnected ? video.getBoundingClientRect() : null;
+    const top = r && r.height ? Math.max(8, r.top + 12) : 12;
+    const right = r && r.width ? Math.max(8, window.innerWidth - r.right + 12) : 12;
+    Object.assign(shotList.style, { top: top + 'px', right: right + 'px' });
+  }
+
+  async function takeScreenshot() {
+    if (!video) return toast('이 화면에서 영상을 찾지 못했습니다.', 'warn', 3000);
+    const w = video.videoWidth, h = video.videoHeight;
+    if (!w || !h || video.readyState < 2) return toast('영상이 아직 준비되지 않았습니다.', 'warn', 2500);
+    const date = new Date();
+    let blob;
+    try {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d', { alpha: false }).drawImage(video, 0, 0, w, h);
+      blob = await new Promise((res, rej) => c.toBlob(b => (b ? res(b) : rej(new Error('이미지를 만들지 못했습니다'))), 'image/png'));
+    } catch (err) {
+      return toast(err && err.name === 'SecurityError' ? '보호된 영상이라 화면을 읽을 수 없습니다.' : '스크린샷 실패: ' + ((err && err.message) || err), 'error', 3500);
+    }
+    const namePromise = buildFileBase(date).catch(() => `[chzzk] ${shortStamp(date)}`);
+    const url = URL.createObjectURL(blob);
+    const list = shotLayer();
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<img alt=""><div class="bar"><button class="save" title="저장">${ICON_SAVE}</button><button class="close" title="닫기">${ICON_X}</button></div><div class="info"></div>`;
+    card.querySelector('img').src = url;
+    const info = card.querySelector('.info');
+    info.textContent = `${w}×${h}`;
+    const close = () => { card.remove(); URL.revokeObjectURL(url); placeShots(); };
+    card.querySelector('.close').addEventListener('click', e => { e.stopPropagation(); close(); });
+    const saveBtn = card.querySelector('.save');
+    saveBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      saveBtn.disabled = true;
+      info.textContent = '저장 중…';
+      try {
+        const path = await downloadBlob(blob, (await namePromise) + '.png');
+        card.classList.add('done');
+        info.textContent = '저장됨';
+        toast(`스크린샷 저장 · ${w}×${h} · ${Math.round(blob.size / 1024)}KB\n${path}`, 'ok', 2500);
+        setTimeout(close, 900);
+      } catch (err) {
+        saveBtn.disabled = false;
+        info.textContent = `${w}×${h}`;
+        const text = String((err && err.message) || err);
+        toast(text.includes('Extension context invalidated') ? '탭을 새로고침하십시오.' : '저장 실패: ' + text, 'error', 4000);
+      }
+    });
+    list.prepend(card);
+    while (list.children.length > SHOT_MAX) {
+      const old = list.lastElementChild;
+      old.querySelector('img') && URL.revokeObjectURL(old.querySelector('img').src);
+      old.remove();
+    }
+    placeShots();
+  }
+
   // 교차편집용 WebP 버퍼 (영상이 꺼진 채널용, 소리 없음)
   async function gifSnapshotData() {
     if (!channel.gif || frames.length < 2) return null;
@@ -684,6 +789,9 @@
     if (!msg) return;
     if (msg.type === 'save-clip') {
       saveClip();
+      sendResponse({ ok: true });
+    } else if (msg.type === 'screenshot') {
+      takeScreenshot();
       sendResponse({ ok: true });
     } else if (msg.type === 'toast') {
       toast(String(msg.text || ''), msg.kind || 'ok', msg.ms || 2500, msg.slot || 'main');

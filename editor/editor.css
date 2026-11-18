@@ -113,3 +113,5 @@ main {
 .outInfo #expEstimate.big { color: var(--warn); font-weight: 600; }
 .quick { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 13px; }
 .quick button { padding: 3px 8px; }
+
+.shotInfo { font-size: 12px; color: var(--muted); max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

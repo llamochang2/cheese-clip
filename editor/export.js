@@ -553,15 +553,18 @@
 
   // target 없음: 기본 저장 위치/교차편집
   // target = { streamer, channelId, sub } (편집): 채널 전용 폴더/sub, 없으면 기본 저장 위치/스트리머명/sub
+  // 형식별 폴더 (확장자 기준)
+  const typeDir = f => ({ mp4: 'mp4', webp: 'webp', png: 'screenshot' })[(String(f).match(/\.(\w+)$/) || [])[1]] || '';
   async function saveOutput(blob, filename, target) {
     const D = root.CHZZK_CLIP_DEFAULTS;
     const { saveMode, saveFolder } = await chrome.storage.sync.get({ saveMode: D.saveMode, saveFolder: D.saveFolder });
     const subName = target ? (cleanName(target.streamer) || 'chzzk') : '교차편집';
     const bsub = target ? cleanName(target.sub) : ''; // 방송 폴더
     const into = async (d, name) => (name ? d.getDirectoryHandle(name, { create: true }) : d);
-    const ext = /\.webp$/i.test(filename) ? '.webp' : '.mp4';
+    const ext = (filename.match(/\.(webp|png)$/i) || ['.mp4'])[0].toLowerCase();
     let file = cleanName(filename) || 'crossedit' + ext;
-    if (!/\.(webp|mp4)$/i.test(file)) file = 'crossedit' + ext; // 확장자 재확인
+    if (!/\.(webp|mp4|png)$/i.test(file)) file = 'crossedit' + ext; // 확장자 재확인
+    const tdir = typeDir(file);
     let note = '';
     // 채널 전용 폴더 (편집, '매번 묻기' 제외)
     if (target && target.channelId && saveMode !== 'ask') {
@@ -570,11 +573,11 @@
         const dir = await root.ChzzkHandleStore.get(target.channelId).catch(() => null);
         if (dir && (await root.ChzzkHandleStore.permission(dir)) === 'granted') {
           try {
-            const d = await into(dir, bsub);
+            const d = await into(await into(dir, bsub), tdir);
             const name = await uniqueName(d, file);
             const w = await (await d.getFileHandle(name, { create: true })).createWritable();
             await w.write(blob); await w.close();
-            return [dir.name, bsub, name].filter(Boolean).join('/');
+            return [dir.name, bsub, tdir, name].filter(Boolean).join('/');
           } catch (e) { note = '\n⚠ 채널 전용 폴더에 쓰지 못해 다운로드 폴더에 대신 저장했습니다'; }
         } else {
           note = '\n⚠ 채널 전용 폴더 권한이 없어 다운로드 폴더에 대신 저장했습니다';
@@ -585,11 +588,11 @@
       const dir = await root.ChzzkHandleStore.get().catch(() => null);
       if (dir && (await root.ChzzkHandleStore.permission(dir)) === 'granted') {
         try {
-          const sub = await into(await into(dir, subName), bsub);
+          const sub = await into(await into(await into(dir, subName), bsub), tdir);
           const name = await uniqueName(sub, file);
           const w = await (await sub.getFileHandle(name, { create: true })).createWritable();
           await w.write(blob); await w.close();
-          return [dir.name, subName, bsub, name].filter(Boolean).join('/');
+          return [dir.name, subName, bsub, tdir, name].filter(Boolean).join('/');
         } catch (e) { note = '\n⚠ 선택한 폴더에 쓰지 못해 다운로드 폴더에 대신 저장했습니다'; }
       } else {
         note = '\n⚠ 기본 저장 폴더 권한이 없어 다운로드 폴더에 대신 저장했습니다';
@@ -598,7 +601,7 @@
     const url = URL.createObjectURL(blob);
     setTimeout(() => URL.revokeObjectURL(url), 30 * 60 * 1000);
     const folder = cleanName(saveFolder) || 'cheese-clip';
-    const path = [folder, subName, bsub, file].filter(Boolean).join('/');
+    const path = [folder, subName, bsub, tdir, file].filter(Boolean).join('/');
     const start = filename => chrome.downloads.download({ url, filename, conflictAction: 'uniquify', saveAs: saveMode === 'ask' });
     try {
       await start(path);
@@ -606,7 +609,7 @@
     } catch (e) {
       if (!/filename/i.test(String(e && e.message))) throw e;
       const ascii = s => s.replace(/[^\x20-\x7e]/g, '').trim();
-      const fb = `chzzk-clips/crossedit/${ascii(file.replace(/\.(mp4|webp)$/i, '')) || 'crossedit'}${ext}`;
+      const fb = `chzzk-clips/crossedit/${tdir ? tdir + '/' : ''}${ascii(file.replace(/\.(mp4|webp|png)$/i, '')) || 'crossedit'}${ext}`;
       await start(fb);
       return fb + note;
     }

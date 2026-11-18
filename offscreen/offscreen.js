@@ -45,8 +45,11 @@ async function uniqueName(dir, name) {
   return `${base} (${Date.now()})${ext}`;
 }
 
+// 형식별 폴더 (확장자 기준)
+const typeDir = f => ({ mp4: 'mp4', webp: 'webp', png: 'screenshot' })[(String(f).match(/\.(\w+)$/) || [])[1]] || '';
+
 // 선택한 폴더에 직접 쓰기. 실패하면 { note: 이유 }
-//   channelId 있음: 채널 전용 폴더/방송 폴더 / 없음: 기본 저장 폴더/스트리머명/방송 폴더
+//   channelId 있음: 채널 전용 폴더/방송 폴더/형식 / 없음: 기본 저장 폴더/스트리머명/방송 폴더/형식
 async function writeToPickedFolder(blob, filename, channelId, streamer, sub) {
   const dir = await Store.get(channelId || undefined).catch(() => null);
   const which = channelId ? '이 채널 전용 저장 폴더' : '기본 저장 폴더';
@@ -67,7 +70,12 @@ async function writeToPickedFolder(blob, filename, channelId, streamer, sub) {
     }
     // 확장자 재확인 (다운로드 저장과 같은 규칙)
     let file = cleanFile(filename);
-    if (!/\.(webp|mp4)$/i.test(file)) file = 'chzzk_clip.bin';
+    if (!/\.(webp|mp4|png)$/i.test(file)) file = 'chzzk_clip.bin';
+    const tdir = typeDir(file);
+    if (tdir) {
+      target = await target.getDirectoryHandle(tdir, { create: true });
+      prefix = `${prefix}/${tdir}`;
+    }
     const name = await uniqueName(target, file);
     const fh = await target.getFileHandle(name, { create: true });
     const w = await fh.createWritable();

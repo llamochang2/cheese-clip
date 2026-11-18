@@ -35,7 +35,8 @@ chrome.runtime.onInstalled.addListener(async details => {
 
 const COMMAND_TO_MESSAGE = {
   'save-clip': 'save-clip',   // WebP
-  'save-video': 'save-video'  // 영상
+  'save-video': 'save-video', // 영상
+  'screenshot': 'screenshot'  // 스크린샷
 };
 
 // ① 단축키
@@ -272,15 +273,17 @@ function cleanFolder(folder) {
   return String(folder || '').split(/[\\/]+/).map(clean).filter(p => p && p !== '..').slice(0, 3).join('/');
 }
 
-// 저장 위치: 다운로드/{saveFolder}/{스트리머명}/{방송제목｜yymmdd}/파일
+// 저장 위치: 다운로드/{saveFolder}/{스트리머명}/{방송제목｜yymmdd}/{mp4|webp|screenshot}/파일
+// 형식별 폴더 (확장자 기준)
+const typeDir = f => ({ mp4: 'mp4', webp: 'webp', png: 'screenshot' })[(String(f).match(/\.(\w+)$/) || [])[1]] || '';
 async function saveFile(url, name, streamer, sub) {
   const D = globalThis.CHZZK_CLIP_DEFAULTS;
   const { saveFolder, saveMode } = await chrome.storage.sync.get({ saveFolder: D.saveFolder, saveMode: D.saveMode });
   const askSaveAs = saveMode === 'ask';
 
   let file = clean(name);
-  if (!/\.(webp|mp4)$/i.test(file)) file = 'chzzk_clip.bin';
-  const folder = [cleanFolder(saveFolder), clean(streamer) || 'chzzk', clean(sub)].filter(Boolean).join('/');
+  if (!/\.(webp|mp4|png)$/i.test(file)) file = 'chzzk_clip.bin';
+  const folder = [cleanFolder(saveFolder), clean(streamer) || 'chzzk', clean(sub), typeDir(file)].filter(Boolean).join('/');
   const path = folder ? `${folder}/${file}` : file;
 
   // 확장은 다운로드 폴더 안에만 직접 저장 가능. '선택한 폴더' 방식은 offscreen이 처리하고,

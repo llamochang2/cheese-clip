@@ -113,7 +113,7 @@ button.ghost:hover { border-color: var(--accent); color: var(--accent); backgrou
 .len { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
 .len output { min-width: 32px; text-align: right; font-size: 12px; }
 .tog.off .len { opacity: .45; }
-.actions { display: grid; grid-template-columns: 0.8fr 1fr 1fr; gap: 6px; }
+.actions { display: grid; grid-template-columns: auto auto 1fr 1fr; gap: 6px; }
 #recToggle.on { color: #ff5a5a; border-color: #ff5a5a; }
 .actions button { padding: 7px 6px; font-size: 13px; color: var(--text); border-color: var(--line); background: var(--panel); }
 .actions button:hover { border-color: var(--accent); }

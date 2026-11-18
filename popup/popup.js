@@ -34,6 +34,8 @@
     $('shortcutVideo').textContent = get('save-video') || '키 없음';
     $('shortcutAll').textContent = get('save-all-videos') || '키 없음';
     $('shortcutEditor').textContent = get('open-editor') || '키 없음';
+    const shotKey = get('screenshot');
+    if (shotKey) $('shotBtn').title += ` (${shotKey})`;
     const recKey = get('record-toggle');
     if (recKey) $('recToggle').title += ` (${recKey})`;
     const trim = get('trim-clip');
@@ -52,6 +54,11 @@
     if (!tab) return;
     await chrome.tabs.sendMessage(tab.id, { type: 'record-toggle' }).catch(() => hint('치지직 방송 탭에서 사용할 수 있습니다'));
     setTimeout(refreshStatus, 300);
+  });
+  $('shotBtn').addEventListener('click', async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const r = tab && await chrome.tabs.sendMessage(tab.id, { type: 'screenshot' }).catch(() => null);
+    if (r && r.ok) window.close(); else hint('치지직 방송 탭에서 사용할 수 있습니다');
   });
   $('openTrim').addEventListener('click', async () => {
     hint('여는 중…');
@@ -180,7 +187,7 @@
       const dir = await Store.get(ch.id).catch(() => null);
       if (dir) {
         const ok = (await Store.permission(dir)) === 'granted';
-        el.replaceChildren(`${dir.name}/방송제목｜날짜 (채널 전용)`);
+        el.replaceChildren(`${dir.name}/방송제목｜날짜/형식 (채널 전용)`);
         if (!ok) el.append(' · ', grantLink('권한 다시 허용', 'ch'));
         return;
       }
@@ -191,12 +198,12 @@
       const dir = await Store.get().catch(() => null);
       if (dir) {
         const ok = (await Store.permission(dir)) === 'granted';
-        el.replaceChildren(`${dir.name}/${who}/방송제목｜날짜`);
+        el.replaceChildren(`${dir.name}/${who}/방송제목｜날짜/형식`);
         if (!ok) el.append(' · ', grantLink('권한 다시 허용', ''));
         return;
       }
     }
-    el.replaceChildren(`다운로드/${s.saveFolder}/${who}/방송제목｜날짜`);
+    el.replaceChildren(`다운로드/${s.saveFolder}/${who}/방송제목｜날짜/형식`);
   }
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync' && (changes.saveMode || changes.saveFolder)) renderWhere();

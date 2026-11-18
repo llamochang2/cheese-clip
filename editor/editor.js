@@ -376,6 +376,53 @@
     requestAnimationFrame(tick);
   }
 
+  // ── 현재 장면 스크린샷 (원본 해상도 PNG, 화면 자르기 적용) ──
+  let shotBusy = false, shotTimer = null;
+  function shotNote(text, ms = 3000) {
+    const el = $('shotInfo');
+    el.textContent = text;
+    clearTimeout(shotTimer);
+    if (ms) shotTimer = setTimeout(() => { el.textContent = ''; }, ms);
+  }
+  async function saveScreenshot() {
+    if (shotBusy || !S.tracks.length) return;
+    if (S.playing) pause();
+    const tr = S.tracks[trackAt(S.t)];
+    const tau = S.t - tr.pos;
+    if (tau < 0 || tau >= tr.durUs / 1e6) return shotNote('이 시점에는 영상이 없습니다.');
+    shotBusy = true;
+    try {
+      let src = tr.isGif ? tr.bmp : tr.el;
+      if (!tr.isGif) {
+        // 멈춘 위치의 장면이 그려질 때까지 대기
+        if (src.seeking || Math.abs(src.currentTime - tau) > 0.05) {
+          src.currentTime = tau;
+          await new Promise(r => { const t = setTimeout(r, 2000); src.addEventListener('seeked', () => { clearTimeout(t); r(); }, { once: true }); });
+        }
+        if (src.readyState < 2) throw new Error('장면을 불러오는 중입니다. 잠시 뒤 다시 누르십시오.');
+      }
+      const ew = tr.isGif ? src && src.width : src.videoWidth, eh = tr.isGif ? src && src.height : src.videoHeight;
+      if (!ew || !eh) throw new Error('장면을 불러오는 중입니다. 잠시 뒤 다시 누르십시오.');
+      const c = S.crop || { x: 0, y: 0, w: 1, h: 1 };
+      const sx = Math.round(c.x * ew), sy = Math.round(c.y * eh);
+      const w = Math.max(1, Math.round(c.w * ew)), h = Math.max(1, Math.round(c.h * eh));
+      const cv = new OffscreenCanvas(w, h);
+      cv.getContext('2d', { alpha: false }).drawImage(src, sx, sy, w, h, 0, 0, w, h);
+      const blob = await cv.convertToBlob({ type: 'image/png' });
+      // 파일 이름: [스트리머명｜방송제목] 장면 시각.png
+      const wall = Number(tr.wallStartUs) / 1000 + tau * 1000;
+      const name = `[${tr.name}${tr.meta.title ? '｜' + tr.meta.title : ''}] ${stampOf(wall || session)}.png`;
+      shotNote('저장 중…', 0);
+      const saved = await X.saveOutput(blob, name, { streamer: tr.name, channelId: tr.meta.channelId, sub: broadcastFolder(tr) });
+      shotNote(`저장됨 · ${w}×${h} · ${saved.split('\n')[0]}`, 5000);
+    } catch (e) {
+      shotNote(String((e && e.message) || e), 4000);
+    } finally {
+      shotBusy = false;
+    }
+  }
+  $('shotBtn').addEventListener('click', saveScreenshot);
+
   // WebP 트랙: 현재 장면을 오른쪽 화면에 그리고 큰 화면용으로 보관
   function showGifFrame(tr, tau) {
     const k = tr.gifDec.indexAt(tau * 1e6);
@@ -623,6 +670,7 @@
       case 'Comma': pause(); seek(S.t - 1 / fps); break;
       case 'Period': pause(); seek(S.t + 1 / fps); break;
       case 'KeyI': setIn(); break;
+      case 'KeyP': saveScreenshot(); break;
       case 'KeyO': setOut(); break;
       case 'Home': seek(S.inT); break;
       case 'End': seek(S.outT); break;
