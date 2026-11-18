@@ -1,5 +1,6 @@
 // 치지직 화면 안 조작: 재생바 버튼(스크린샷·녹화)과 키 하나짜리 단축키
 //   재생바를 찾으면 그 안에 버튼을 넣고, 못 찾으면 영상 위 오른쪽 아래에 떠 있는 버튼을 씀
+//   재생바 자동 숨김은 플레이어의 pzp-pc--controls 표시를 따르는 CSS로 맞춤 (추적 없음)
 //   키 단축키는 이 탭을 보고 있을 때만 작동 (입력창에 쓰는 중이거나 Ctrl·Alt와 함께 누르면 무시)
 (() => {
   'use strict';
@@ -49,14 +50,16 @@
   const ICON_SHOT = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.4-2h5.8l1.4 2h2.2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/><circle cx="12" cy="12.8" r="3.4"/></svg>';
   const ICON_REC = '<svg viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.9"/><circle class="dot" cx="12" cy="12" r="3.6" fill="currentColor"/></svg>';
   const STYLE = `
-    .cc-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0;
-              border: 0; background: transparent; color: #fff; cursor: pointer; flex: none; }
+    .cc-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; margin: 0 4px; padding: 0;
+              border: 0; border-radius: 6px; background: transparent; color: #fff; cursor: pointer; flex: none; transition: opacity .2s; }
+    .cc-btn:hover { background: rgba(255,255,255,.12); }
+    /* 치지직은 재생바가 보일 때 플레이어(.pzp-pc)에 pzp-pc--controls를 붙이고, 숨길 때 뗌 */
+    .pzp-pc:not(.pzp-pc--controls) .cc-btn { opacity: 0 !important; pointer-events: none !important; }
     .cc-btn.on { color: #ff4d4d; }
     .cc-btn.on .dot { animation: cc-blink 1s steps(2, start) infinite; }
     @keyframes cc-blink { to { visibility: hidden; } }`;
 
   function makeButtons() {
-    shared_ = []; // 새 버튼에는 아직 클래스가 없음
     const s = document.createElement('button');
     s.type = 'button'; s.className = 'cc-btn cc-shot'; s.innerHTML = ICON_SHOT;
     s.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); shot(); });
@@ -102,24 +105,10 @@
     if (!barStyle.isConnected) (document.head || document.documentElement).appendChild(barStyle);
     if (!btns) btns = makeButtons();
     if (btns[0].parentNode !== bar || bar.firstChild !== btns[0]) bar.prepend(btns[0], btns[1]);
-    inBar = bar;
-    adoptBarClass(bar);
   }
 
-  // 재생바가 숨을 때 같이 숨기: 치지직 버튼들이 공통으로 쓰는 클래스를 확장 버튼에도 붙임
-  //   치지직은 재생바를 숨길 때 버튼마다 그 클래스로 투명하게 만듦
-  let inBar = null, shared_ = [];
-  function adoptBarClass(bar) {
-    const own = [...bar.children].filter(el => el.tagName === 'BUTTON' && !el.classList.contains('cc-btn'));
-    let common = own.length >= 2 ? [...own[0].classList] : [];
-    for (const el of own.slice(1)) common = common.filter(c => el.classList.contains(c));
-    if (common.join(' ') === shared_.join(' ')) return;
-    for (const b of btns) { b.classList.remove(...shared_); b.classList.add(...common); }
-    shared_ = common;
-  }
 
   function placeFloating(video) {
-    inBar = null;
     if (!float) {
       const host = document.createElement('div');
       host.attachShadow({ mode: 'open' }).innerHTML = `<style>${STYLE}
