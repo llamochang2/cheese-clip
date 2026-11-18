@@ -51,8 +51,8 @@
   const STYLE = `
     .cc-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0;
               border: 0; background: transparent; color: #fff; cursor: pointer; opacity: .9; flex: none; }
-    .cc-btn:hover { opacity: 1; }
-    .cc-btn.on { color: #ff4d4d; opacity: 1; }
+    .cc-btn { transition: opacity .2s; }
+    .cc-btn.on { color: #ff4d4d; }
     .cc-btn.on .dot { animation: cc-blink 1s steps(2, start) infinite; }
     @keyframes cc-blink { to { visibility: hidden; } }`;
 
@@ -102,9 +102,34 @@
     if (!barStyle.isConnected) (document.head || document.documentElement).appendChild(barStyle);
     if (!btns) btns = makeButtons();
     if (btns[0].parentNode !== bar || bar.firstChild !== btns[0]) bar.prepend(btns[0], btns[1]);
+    inBar = bar;
   }
 
+  // 재생바가 숨을 때 같이 숨기: 옆 버튼(치지직 것)의 보이는 정도를 그대로 따라감
+  //   치지직은 재생바를 숨길 때 버튼마다 따로 투명하게 만들어서, 끼워 넣은 버튼은 저절로 숨지 않음
+  let inBar = null;
+  function visibilityOf(el) {
+    let op = 1, vis = true;
+    for (const e of [el, el.firstElementChild].filter(Boolean)) {
+      const cs = getComputedStyle(e);
+      op = Math.min(op, parseFloat(cs.opacity) || 0);
+      if (cs.visibility === 'hidden' || cs.display === 'none') vis = false;
+    }
+    return vis ? op : 0;
+  }
+  function syncWithBar() {
+    if (!btns || !inBar || btns[0].parentNode !== inBar) return;
+    const ref = [...inBar.children].find(el => !el.classList.contains('cc-btn') && el.offsetParent !== null);
+    const op = ref ? visibilityOf(ref) : 1;
+    for (const b of btns) {
+      b.style.opacity = String(op);
+      b.style.pointerEvents = op < 0.1 ? 'none' : '';
+    }
+  }
+  setInterval(syncWithBar, 100);
+
   function placeFloating(video) {
+    inBar = null;
     if (!float) {
       const host = document.createElement('div');
       host.attachShadow({ mode: 'open' }).innerHTML = `<style>${STYLE}
