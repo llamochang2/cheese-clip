@@ -813,7 +813,7 @@
     return meta;
   }
 
-  globalThis.__chzzkVideoClip = { status, save: saveVideo };
+  globalThis.__chzzkVideoClip = { status, save: saveVideo, toggleRec: toggleRecording, isRecording: () => !!rec };
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg && msg.type === 'snapshot') {

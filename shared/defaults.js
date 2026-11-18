@@ -19,7 +19,12 @@ globalThis.CHZZK_CLIP_DEFAULTS = Object.freeze({
   // 'downloads' : 다운로드/cheese-clip/스트리머명
   // 'ask'       : 저장할 때마다 위치 묻기
   saveMode: 'downloads',
-  saveFolder: 'cheese-clip' // 다운로드 안 폴더 ('downloads' 방식, 선택 폴더 실패 시 대체)
+  saveFolder: 'cheese-clip', // 다운로드 안 폴더 ('downloads' 방식, 선택 폴더 실패 시 대체)
+
+  // ── 치지직 화면 안 조작 ──
+  pageKeyShot: 'KeyS',  // 키 하나 단축키 (KeyboardEvent.code, ''이면 끔)
+  pageKeyRec: 'KeyR',
+  playerButtons: true   // 재생바에 스크린샷·녹화 버튼
 });
 
 globalThis.CHZZK_CLIP_CONST = Object.freeze({

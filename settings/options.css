@@ -77,3 +77,7 @@ kbd { background: var(--panel2); border: 1px solid var(--line); border-radius: 4
 kbd.none { color: var(--muted); }
 .notice { padding-left: 20px; margin: 0; }
 .notice li { margin-bottom: 8px; }
+
+.card h3 { margin: 18px 0 6px; font-size: 14px; }
+.keyPick { min-width: 64px; padding: 3px 10px; font-size: 12px; }
+.keyPick.none { color: var(--muted); }

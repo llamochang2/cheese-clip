@@ -156,6 +156,41 @@
     });
     $('keyList').replaceChildren(...rows);
   }
+  // 치지직 화면 안 단축키 (키 하나)
+  const keyLabel = code => !code ? '끔' : code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, '숫자판 ');
+  let picking = null;
+  async function renderPageKeys() {
+    const s = await chrome.storage.sync.get({ pageKeyShot: DEFAULTS.pageKeyShot, pageKeyRec: DEFAULTS.pageKeyRec, playerButtons: DEFAULTS.playerButtons });
+    document.querySelectorAll('.keyPick').forEach(b => {
+      if (b === picking) return;
+      b.textContent = keyLabel(s[b.dataset.key]);
+      b.classList.toggle('none', !s[b.dataset.key]);
+    });
+    $('playerButtons').checked = !!s.playerButtons;
+  }
+  document.querySelectorAll('.keyPick').forEach(b => b.addEventListener('click', () => {
+    if (picking) renderPageKeys();
+    picking = b;
+    b.textContent = '키를 누르십시오…';
+  }));
+  document.addEventListener('keydown', async e => {
+    if (!picking) return;
+    e.preventDefault();
+    const b = picking;
+    picking = null;
+    if (e.code === 'Escape') return renderPageKeys();
+    if (['Tab', 'Enter', 'Space'].includes(e.code) || /^(Shift|Control|Alt|Meta)/.test(e.code)) { picking = b; return; }
+    const code = e.code === 'Backspace' || e.code === 'Delete' ? '' : e.code;
+    const other = b.dataset.key === 'pageKeyShot' ? 'pageKeyRec' : 'pageKeyShot';
+    const set = { [b.dataset.key]: code };
+    const cur = await chrome.storage.sync.get({ [other]: DEFAULTS[other] });
+    if (code && cur[other] === code) set[other] = ''; // 같은 키면 다른 쪽은 끔
+    await chrome.storage.sync.set(set);
+    flashSaved();
+    renderPageKeys();
+  }, true);
+  $('playerButtons').addEventListener('change', async () => { await chrome.storage.sync.set({ playerButtons: $('playerButtons').checked }); flashSaved(); });
+
   $('changeShortcut').addEventListener('click', () => chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }));
   // 크롬 단축키 화면에서 돌아오면 갱신
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { renderKeys(); renderSave(); renderChannels(); } });
@@ -164,6 +199,7 @@
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync') {
       chrome.storage.sync.get(DEFAULTS).then(render);
+      if (changes.pageKeyShot || changes.pageKeyRec || changes.playerButtons) renderPageKeys();
       if (changes.saveMode || changes.saveFolder) renderSave();
     }
     if (area === 'local' && Object.keys(changes).some(k => k.startsWith('ch:'))) renderChannels();
@@ -172,6 +208,7 @@
   chrome.storage.sync.get(DEFAULTS).then(render);
   renderSave();
   renderKeys();
+  renderPageKeys();
   renderChannels().then(() => {
     if (location.hash) { const el = document.querySelector(location.hash); if (el) el.scrollIntoView(); }
   });

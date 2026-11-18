@@ -780,7 +780,7 @@
     getVideo: () => video,
     getChannel: () => channel,
     gifSnapshotData,
-    toast, buildFileBase, getBroadcastTitle, broadcastMeta,
+    toast, buildFileBase, getBroadcastTitle, broadcastMeta, screenshot: takeScreenshot,
     download: downloadBlob
   };
 
