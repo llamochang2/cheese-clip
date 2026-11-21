@@ -33,8 +33,10 @@
   let vOff = Infinity, aOff = Infinity;
   let aRaw = NaN; // 가장 최근 소리의 (도착 시각 − 타임스탬프), 조각마다 기록해 저장 시 구간별로 다시 계산
   // 소리 압축기는 입력 사이의 빈 구간을 무시하고 시각을 이어 붙이므로, 입력별 원래 시각을 기록해 되돌림
-  //   { enc: 압축기 기준 시작 시각, ts: 원래 시각, raw: 도착 시각 − 원래 시각 }
+  // flush 뒤에는 압축기가 다음 입력의 시각부터 다시 세므로 구간(seg)을 나눠 기록
+  //   { enc: 압축기 기준 시작 시각, ts: 원래 시각, raw: 도착 시각 − 원래 시각, seg: 구간 번호 }
   let aMap = [], aMapBase = null, aMapFrames = 0, aMapRate = 0;
+  let aSeg = 0, aOutSeg = 0; // 입력 쪽 / 출력 쪽 현재 구간
   let wasPaused = false;
   let problem = null;                   // 실패 이유
   let canvas = null, ctx = null;
@@ -425,9 +427,19 @@
     aRaw = off;
     if (!Number.isFinite(aOff) || off < aOff) aOff = off; // 버퍼 정리용 대략값
     if (aMapBase === null) { aMapBase = data.timestamp; aMapFrames = 0; aMapRate = data.sampleRate; }
-    aMap.push({ enc: aMapBase + Math.round(aMapFrames * 1e6 / aMapRate), ts: data.timestamp, raw: off });
+    aMap.push({ enc: aMapBase + Math.round(aMapFrames * 1e6 / aMapRate), ts: data.timestamp, raw: off, seg: aSeg });
     aMapFrames += data.numberOfFrames;
     aEncoder.encode(data);
+  }
+
+  // 압축기에 남은 소리 꺼내기. 이후 입력은 새 구간으로 기록
+  async function flushAudio() {
+    const enc = aEncoder;
+    if (!enc || enc.state !== 'configured') return;
+    aMapBase = null;
+    const seg = ++aSeg;
+    const done = enc.flush().then(() => { if (enc === aEncoder) aOutSeg = Math.max(aOutSeg, seg); }, () => {});
+    await withTimeout(done, 1000);
   }
 
   async function configureAudio(sampleRate, channels, my) {
@@ -458,7 +470,7 @@
         }
       });
       enc.configure(cfg);
-      aMap = []; aMapBase = null;
+      aMap = []; aMapBase = null; aOutSeg = aSeg;
       aEncoder = enc;
       aInfo = info;
       return;
@@ -473,7 +485,8 @@
     }
     // 압축기 시각 → 원래 시각
     const e = chunk.timestamp;
-    while (aMap.length > 1 && aMap[1].enc <= e + 1000) aMap.shift();
+    while (aMap.length && aMap[0].seg < aOutSeg) aMap.shift();
+    while (aMap.length > 1 && aMap[1].seg === aMap[0].seg && aMap[1].enc <= e + 1000) aMap.shift();
     const m = aMap[0];
     const timestamp = m ? m.ts + (e - m.enc) : e;
     const raw = m ? m.raw : (Number.isFinite(aRaw) ? aRaw : aOff);
@@ -526,7 +539,7 @@
     try {
       // 인코더에 남은 장면까지 꺼내기
       try { if (vEncoder && vEncoder.state === 'configured') await withTimeout(vEncoder.flush(), 1500); } catch (_) {}
-      try { if (aEncoder && aEncoder.state === 'configured') await withTimeout(aEncoder.flush(), 1000); } catch (_) {}
+      await flushAudio();
       if (vEncoder) forceKey = true; // flush 뒤 새 키프레임
 
       const vs = vChunks.slice();
@@ -551,14 +564,20 @@
       // 복사한 소리는 스피커 출력 전이라 빠름 → 출력 지연 + 캡처 지연(반 프레임) + 사용자 보정만큼 늦춤
       const delayUs = (await outputLatencyUs()) + frameUs / 2 + settings.audioSyncMs * 1000;
       const { offs } = audioOffsets(as);
-      const aPart = gapless(as.map((c, i) => ({ data: c.data, duration: c.duration, timestamp: c.timestamp + offs[i] - vOff + delayUs }))
-        .filter(c => c.timestamp >= t0 && c.timestamp < tEnd));
+      const Mux = globalThis.ChzzkMp4Mux;
+      const ai = aInfo;
+      let aPart = as.map((c, i) => ({ data: c.data, duration: c.duration, timestamp: c.timestamp + offs[i] - vOff + delayUs }))
+        .filter(c => c.timestamp >= t0 && c.timestamp < tEnd);
+      if (aPart.length && ai) {
+        const aCfg = { codec: ai.kind, sampleRate: ai.sampleRate, channels: ai.channels, bitrate: ai.bitrate };
+        aPart = Mux.fillAudioGaps(aPart, t0, await Mux.silentAudioFrame(aCfg));
+      }
 
-      const out = globalThis.ChzzkMp4Mux.muxMp4({
+      const out = Mux.muxMp4({
         video: { codec: info.kind, codecString: info.codecString, width: info.width, height: info.height,
                  description: info.description, samples: vPart, frameDuration: frameUs, color: info.color },
-        audio: aPart.length && aInfo ? { codec: aInfo.kind, sampleRate: aInfo.sampleRate, channels: aInfo.channels,
-                 bitrate: aInfo.bitrate, description: aInfo.description, samples: aPart } : null
+        audio: aPart.length && ai ? { codec: ai.kind, sampleRate: ai.sampleRate, channels: ai.channels,
+                 bitrate: ai.bitrate, description: ai.description, samples: aPart } : null
       });
       const blob = new Blob([out], { type: 'video/mp4' });
       const filename = (await s.buildFileBase(pressedAt)) + '.mp4';
@@ -617,21 +636,6 @@
       offs[i] = prev = o;
     }
     return { offs, fixes };
-  }
-
-  // MP4 직접 저장용: 버퍼링으로 비는 구간은 앞 조각 길이를 늘려 간격을 두고, 겹치는 조각은 버림
-  function gapless(part) {
-    const out = [];
-    for (const c of part) {
-      const last = out[out.length - 1];
-      if (last) {
-        const end = last.timestamp + (last.duration || 0);
-        if (c.timestamp < end - 40000) continue;                       // 겹침
-        if (c.timestamp > end + 40000) last.duration = c.timestamp - last.timestamp; // 빈 구간
-      }
-      out.push({ ...c });
-    }
-    return out;
   }
 
   // 독립 Uint8Array 복사본
@@ -704,7 +708,7 @@
     snapFail = !on() ? null : !video ? '영상 없음' : !vInfo ? '영상 압축기 준비 안 됨' : vChunks.length < 2 ? `영상 버퍼 비어 있음 (${diagnose() || '재생 직후'})` : null;
     if (!s || !on() || !video || vChunks.length < 2 || !vInfo) return null;
     try { if (vEncoder && vEncoder.state === 'configured') await withTimeout(vEncoder.flush(), 1500); } catch (_) {}
-    try { if (aEncoder && aEncoder.state === 'configured') await withTimeout(aEncoder.flush(), 1000); } catch (_) {}
+    await flushAudio();
     if (vEncoder) forceKey = true;
     return buildSnapshot(session, captureState(fromTs));
   }
@@ -775,7 +779,7 @@
     if (immediate) st = captureState(r.fromTs, r.pressTs);
     else {
       try { if (vEncoder && vEncoder.state === 'configured') await withTimeout(vEncoder.flush(), 1500); } catch (_) {}
-      try { if (aEncoder && aEncoder.state === 'configured') await withTimeout(aEncoder.flush(), 1000); } catch (_) {}
+      await flushAudio();
       if (vEncoder) forceKey = true;
       st = captureState(r.fromTs, r.pressTs);
     }

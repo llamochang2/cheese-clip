@@ -90,7 +90,9 @@
     if (meta.audio) meta.audio.descriptionU8 = meta.audio.description ? fromB64(meta.audio.description) : null;
     v.sort((x, y) => x.ts - y.ts);
     a.sort((x, y) => x.ts - y.ts);
-    return { tabId, meta, name: meta.name, v, a, durUs: meta.durationUs, wallStartUs: meta.wallStartUs, offset: 0, pos: 0, pcm: undefined };
+    const m = meta.audio;
+    const silent = m ? await Mux.silentAudioFrame({ codec: m.kind, sampleRate: m.sampleRate, channels: m.channels, bitrate: m.bitrate }) : null;
+    return { tabId, meta, name: meta.name, v, a, silent, durUs: meta.durationUs, wallStartUs: meta.wallStartUs, offset: 0, pos: 0, pcm: undefined };
   }
 
   // 트랙 → 미리보기용 MP4 (재압축 없음)
@@ -102,7 +104,8 @@
                samples: tr.v.map(c => ({ data: c.data, timestamp: c.ts, key: c.key })) },
       audio: m.audio && tr.a.length ? {
         codec: m.audio.kind, sampleRate: m.audio.sampleRate, channels: m.audio.channels, bitrate: m.audio.bitrate,
-        description: m.audio.descriptionU8, samples: tr.a.map(c => ({ data: c.data, timestamp: c.ts, duration: c.dur })) } : null
+        description: m.audio.descriptionU8,
+        samples: Mux.fillAudioGaps(tr.a.map(c => ({ data: c.data, timestamp: c.ts, duration: c.dur })), 0, tr.silent) } : null
     });
     tr.url = URL.createObjectURL(new Blob([out], { type: 'video/mp4' }));
   }

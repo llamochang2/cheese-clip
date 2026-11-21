@@ -265,7 +265,64 @@
     return out;
   }
 
-  const api = { muxMp4 };
+  // ── 소리 빈 구간 채우기 ──
+  // 재생기는 조각 시각을 무시하고 소리를 이어 재생하므로, 빈 구간에는 실제 무음 조각을 넣어야 함
+
+  // 같은 설정의 무음 조각 1개 (설정별로 한 번 만들어 재사용)
+  const silentCache = new Map();
+  function silentAudioFrame(a) {
+    const key = [a.codec, a.sampleRate, a.channels, a.bitrate].join('/');
+    if (!silentCache.has(key)) silentCache.set(key, makeSilentFrame(a).catch(() => null));
+    return silentCache.get(key);
+  }
+  async function makeSilentFrame(a) {
+    if (typeof AudioEncoder === 'undefined') return null;
+    const chunks = [];
+    const enc = new AudioEncoder({
+      output: c => { const d = new Uint8Array(c.byteLength); c.copyTo(d); chunks.push({ data: d, duration: c.duration || 0 }); },
+      error: () => {}
+    });
+    const cfg = { codec: a.codec === 'aac' ? 'mp4a.40.2' : 'opus', sampleRate: a.sampleRate, numberOfChannels: a.channels, bitrate: a.bitrate || 128000 };
+    if (a.codec === 'aac') cfg.aac = { format: 'aac' };
+    enc.configure(cfg);
+    const n = Math.round(a.sampleRate * 0.5); // 0.5초
+    enc.encode(new AudioData({ format: 'f32-planar', sampleRate: a.sampleRate, numberOfFrames: n, numberOfChannels: a.channels,
+                               timestamp: 0, data: new Float32Array(n * a.channels) }));
+    await enc.flush();
+    try { enc.close(); } catch (_) {}
+    const c = chunks[chunks.length >> 1]; // 시작·끝이 아닌 가운데 조각
+    return c && c.duration ? c : null;
+  }
+
+  /**
+   * 소리 조각을 시각대로 이어 붙인 목록으로 만들기
+   *   samples: [{ data, timestamp(µs), duration(µs) }] (시간순), start: 소리 시작 위치(µs)
+   *   빈 구간은 무음 조각으로 채우고, 겹치는 조각은 버림. 오차는 조각 반 개 이내로 유지
+   *   무음 조각이 없으면 앞 조각 길이를 늘려 빈 구간 표시 (일부 재생기만 지킴)
+   */
+  function fillAudioGaps(samples, start, silent) {
+    const out = [];
+    if (!samples.length) return out;
+    let pos = silent ? start : samples[0].timestamp;
+    for (const s of samples) {
+      const dur = s.duration || (silent ? silent.duration : 20000);
+      if (s.timestamp < pos - dur / 2) continue; // 겹침
+      if (silent) {
+        while (s.timestamp - pos >= silent.duration / 2) {
+          out.push({ data: silent.data, timestamp: pos, duration: silent.duration });
+          pos += silent.duration;
+        }
+      } else if (out.length && s.timestamp - pos > 40000) {
+        out[out.length - 1].duration += s.timestamp - pos;
+        pos = s.timestamp;
+      }
+      out.push({ data: s.data, timestamp: pos, duration: dur });
+      pos += dur;
+    }
+    return out;
+  }
+
+  const api = { muxMp4, silentAudioFrame, fillAudioGaps };
   root.ChzzkMp4Mux = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api; // 테스트용(Node)
 })(typeof globalThis !== 'undefined' ? globalThis : this);

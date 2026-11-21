@@ -70,9 +70,15 @@
     });
     try {
       dec.configure(cfg);
+      // 압축 해제기는 빈 구간을 무시하고 시각을 이어 붙이므로, 시각이 끊기는 곳에서 flush해 다시 맞춤
+      const frameUs = a.kind === 'aac' ? 1024 / a.sampleRate * 1e6 : 20000;
+      let expect = null;
       for (const s of track.a) {
         if (failed) break;
-        dec.decode(new EncodedAudioChunk({ type: 'key', timestamp: Math.max(0, Math.round(s.ts)), duration: s.dur || undefined, data: s.data }));
+        const ts = Math.max(0, Math.round(s.ts));
+        if (expect !== null && Math.abs(ts - expect) > 10000) await dec.flush();
+        expect = ts + (s.dur || frameUs);
+        dec.decode(new EncodedAudioChunk({ type: 'key', timestamp: ts, duration: s.dur || undefined, data: s.data }));
         if (dec.decodeQueueSize > 50) await sleep(1);
       }
       if (!(await withTimeout(dec.flush(), 10000))) failed = failed || new Error('소리 풀기 시간 초과');
