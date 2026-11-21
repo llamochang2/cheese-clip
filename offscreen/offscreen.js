@@ -89,9 +89,27 @@ async function writeToPickedFolder(blob, filename, channelId, streamer, sub) {
   }
 }
 
+// 파일 주소 → 해제 타이머
+const urls = new Map();
+function revoke(url) {
+  const t = urls.get(url);
+  if (t === undefined) return;
+  clearTimeout(t);
+  urls.delete(url);
+  URL.revokeObjectURL(url);
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || msg.target !== 'offscreen') return;
   const from = sender.url || '';
+
+  // 다운로드가 끝난 파일 해제
+  if (msg.type === 'revoke') {
+    if (sender.id === chrome.runtime.id && from.startsWith(chrome.runtime.getURL(''))) revoke(String(msg.url));
+    sendResponse({ ok: true });
+    return;
+  }
+
   if (!from.startsWith('https://chzzk.naver.com')) {
     sendResponse({ ok: false, error: '허용되지 않은 출처' });
     return;
@@ -140,8 +158,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         note = r.note; // 실패 시 다운로드 폴더로 대체
       }
       const url = URL.createObjectURL(blob);
-      // 다운로드 시작 후 여유를 두고 해제 ('매번 묻기' 창 대비)
-      setTimeout(() => URL.revokeObjectURL(url), 30 * 60 * 1000);
+      // 다운로드가 끝나면 해제, 늦어도 30분 뒤 해제
+      urls.set(url, setTimeout(() => revoke(url), 30 * 60 * 1000));
       return { ok: true, url, note };
     })()
       .then(sendResponse)

@@ -56,10 +56,11 @@
     }
   }
 
-  let pending = null;
+  let pending = null, pendingAt = 0;
   function request(muted) {
-    if (pending === muted) return;
+    if (pending === muted && performance.now() - pendingAt < 5000) return;
     pending = muted;
+    pendingAt = performance.now();
     document.dispatchEvent(new CustomEvent('chzzk-clip-tab-mute', { detail: !!muted }));
   }
 
@@ -94,24 +95,39 @@
     }
   });
 
-  // 확장(콘텐츠 스크립트)에서 오는 신호
-  document.addEventListener('chzzk-clip-config', e => {
-    const on = e.detail === true;
+  // 끄면 플레이어가 정한 값으로 되돌림
+  function setActive(on, releaseTab = true) {
     if (on === active) return;
     active = on;
     if (on) {
       for (const el of document.querySelectorAll('video[data-chzzk-clip]')) { ensure(el); apply(el); }
     } else {
-      // 끄면 플레이어가 정한 값 그대로 되돌리고 탭 음소거 해제
       for (const el of targets) {
         const s = st.get(el);
         if (s) { dV.set.call(el, s.volume); dM.set.call(el, s.muted); }
         st.delete(el);
       }
       targets.clear();
-      if (tabMuted) request(false);
+      if (tabMuted && releaseTab) request(false);
     }
+  }
+
+  // 확장(콘텐츠 스크립트)에서 오는 신호
+  let aliveAt = 0, lostContact = false;
+  document.addEventListener('chzzk-clip-config', e => {
+    aliveAt = performance.now();
+    lostContact = false;
+    setActive(e.detail === true);
   });
+  // 연결 확인 신호 (1초마다)
+  document.addEventListener('chzzk-clip-alive', () => {
+    aliveAt = performance.now();
+    if (lostContact) { lostContact = false; setActive(true); }
+  });
+  // 5초 넘게 신호가 없으면 끔
+  setInterval(() => {
+    if (active && performance.now() - aliveAt > 5000) { lostContact = true; setActive(false, false); }
+  }, 1000);
   document.addEventListener('chzzk-clip-tab-muted', e => {
     tabMuted = e.detail === true;
     pending = null;

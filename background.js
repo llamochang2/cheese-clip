@@ -28,10 +28,23 @@ chrome.runtime.onInstalled.addListener(async details => {
   if (!noticeOkV2 && (details.reason === 'install' || details.reason === 'update')) {
     chrome.tabs.create({ url: chrome.runtime.getURL('settings/notice.html') });
   }
+  // 업데이트 전 버전이 건 탭 음소거 해제
+  if (details.reason === 'update') setTimeout(releaseOurTabMutes, 8000);
   const s = await chrome.storage.sync.get(['saveMode', 'askSaveAs']);
   if (!s.saveMode && s.askSaveAs) await chrome.storage.sync.set({ saveMode: 'ask' });
   await chrome.storage.sync.remove(['askSaveAs', 'saveFolder', 'enabled', 'videoEnabled']);
 });
+
+async function releaseOurTabMutes() {
+  const tabs = await chrome.tabs.query({ muted: true }).catch(() => []);
+  for (const t of tabs) {
+    const mi = t.mutedInfo || {};
+    if (mi.reason !== 'extension' || mi.extensionId !== chrome.runtime.id) continue;
+    // 새 버전과 연결된 탭은 제외
+    const linked = await chrome.tabs.sendMessage(t.id, { type: 'ping' }).then(r => !!(r && r.ok), () => false);
+    if (!linked) chrome.tabs.update(t.id, { muted: false }).catch(() => {});
+  }
+}
 
 const COMMAND_TO_MESSAGE = {
   'save-clip': 'save-clip',   // WebP
@@ -253,10 +266,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return;
     }
     saveFile(msg.url, msg.filename, msg.streamer, msg.sub)
-      .then(r => sendResponse({ ok: true, ...r }))
+      .then(r => {
+        if (Number.isInteger(r.id)) chrome.storage.session.set({ ['dl:' + r.id]: msg.url }).catch(() => {});
+        sendResponse({ ok: true, ...r });
+      })
       .catch(err => sendResponse({ ok: false, error: String((err && err.message) || err) }));
     return true;
   }
+});
+
+// 다운로드가 끝나면 파일 데이터 해제
+chrome.downloads.onChanged.addListener(async d => {
+  const state = d.state && d.state.current;
+  if (state !== 'complete' && state !== 'interrupted') return;
+  const key = 'dl:' + d.id;
+  const url = (await chrome.storage.session.get(key).catch(() => ({})))[key];
+  if (!url) return;
+  chrome.storage.session.remove(key).catch(() => {});
+  const url0 = chrome.runtime.getURL('offscreen/offscreen.html');
+  const open = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'], documentUrls: [url0] }).catch(() => []);
+  if (open.length) chrome.runtime.sendMessage({ target: 'offscreen', type: 'revoke', url }).catch(() => {});
 });
 
 // ── 파일 저장 ─────────────────────────────────────────

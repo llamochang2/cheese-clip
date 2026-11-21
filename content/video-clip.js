@@ -32,11 +32,10 @@
   // 영상·소리 시계 차이: (도착 시각 − 타임스탬프)의 최솟값
   let vOff = Infinity, aOff = Infinity;
   let aRaw = NaN; // 가장 최근 소리의 (도착 시각 − 타임스탬프), 조각마다 기록해 저장 시 구간별로 다시 계산
-  // 소리 압축기는 입력 사이의 빈 구간을 무시하고 시각을 이어 붙이므로, 입력별 원래 시각을 기록해 되돌림
-  // flush 뒤에는 압축기가 다음 입력의 시각부터 다시 세므로 구간(seg)을 나눠 기록
-  //   { enc: 압축기 기준 시작 시각, ts: 원래 시각, raw: 도착 시각 − 원래 시각, seg: 구간 번호 }
+  // 소리 압축기 출력 시각 → 원래 시각 (압축기는 빈 구간을 무시하고, flush 뒤에는 새로 셈)
+  //   { enc: 압축기 기준 시각, ts: 원래 시각, raw: 도착 시각 − 원래 시각, seg: flush 구간 }
   let aMap = [], aMapBase = null, aMapFrames = 0, aMapRate = 0;
-  let aSeg = 0, aOutSeg = 0; // 입력 쪽 / 출력 쪽 현재 구간
+  let aSeg = 0, aOutSeg = 0; // 입력 / 출력 구간
   let wasPaused = false;
   let problem = null;                   // 실패 이유
   let canvas = null, ctx = null;
@@ -102,6 +101,8 @@
     // 소리 트랙이 늦게 생기면 이어서 연결
     if (stream && !aReader && stream.getAudioTracks().length) startAudio(session);
     setMuteGuard(!!video);
+    // 음소거 대체 연결 확인
+    if (guardOn && chrome.runtime && chrome.runtime.id) document.dispatchEvent(new CustomEvent('chzzk-clip-alive'));
   }, 1000);
 
   // ── 음소거 대체: 플레이어 음소거 → 크롬 탭 음소거 (녹음 유지) ──
@@ -113,12 +114,14 @@
   }
   document.addEventListener('chzzk-clip-tab-mute', e => {
     const want = e.detail === true;
-    chrome.runtime.sendMessage({ type: 'tab-mute', muted: want })
-      .then(r => {
-        tabMutedByUs = !!(r && r.byUs);
-        document.dispatchEvent(new CustomEvent('chzzk-clip-tab-muted', { detail: !!(r && r.muted) }));
-      })
-      .catch(() => document.dispatchEvent(new CustomEvent('chzzk-clip-tab-muted', { detail: false })));
+    // 실패하면 답하지 않음 (실제 음소거 유지)
+    let sent;
+    try { sent = chrome.runtime.sendMessage({ type: 'tab-mute', muted: want }); } catch (_) { return; }
+    sent.then(r => {
+      if (!r || !r.ok) return;
+      tabMutedByUs = !!r.byUs;
+      document.dispatchEvent(new CustomEvent('chzzk-clip-tab-muted', { detail: !!r.muted }));
+    }).catch(() => {});
   });
 
   function attach(v) {
@@ -426,13 +429,54 @@
     const off = performance.now() * 1000 - data.timestamp;
     aRaw = off;
     if (!Number.isFinite(aOff) || off < aOff) aOff = off; // 버퍼 정리용 대략값
-    if (aMapBase === null) { aMapBase = data.timestamp; aMapFrames = 0; aMapRate = data.sampleRate; }
+    const input = conformAudio(data, aInfo);
+    if (aMapBase === null) { aMapBase = data.timestamp; aMapFrames = 0; aMapRate = input.sampleRate; }
     aMap.push({ enc: aMapBase + Math.round(aMapFrames * 1e6 / aMapRate), ts: data.timestamp, raw: off, seg: aSeg });
-    aMapFrames += data.numberOfFrames;
-    aEncoder.encode(data);
+    aMapFrames += input.numberOfFrames;
+    try {
+      aEncoder.encode(input);
+    } finally {
+      if (input !== data) input.close();
+    }
   }
 
-  // 압축기에 남은 소리 꺼내기. 이후 입력은 새 구간으로 기록
+  // 소리 조각을 압축기의 샘플레이트·채널 수로 변환
+  function conformAudio(data, info) {
+    const inCh = data.numberOfChannels, inRate = data.sampleRate;
+    if (inRate === info.sampleRate && inCh === info.channels) return data;
+    const n = data.numberOfFrames;
+    const planes = [];
+    for (let c = 0; c < inCh; c++) {
+      const p = new Float32Array(n);
+      data.copyTo(p, { planeIndex: c, format: 'f32-planar' });
+      planes.push(p);
+    }
+    // 채널: 1→2는 복사, 여러 채널→1은 평균, 그 외는 앞 채널부터 사용
+    const outCh = info.channels;
+    const src = [];
+    for (let c = 0; c < outCh; c++) {
+      if (outCh === 1 && inCh > 1) {
+        const m = new Float32Array(n);
+        for (const p of planes) for (let i = 0; i < n; i++) m[i] += p[i] / inCh;
+        src.push(m);
+      } else src.push(planes[Math.min(c, inCh - 1)]);
+    }
+    // 샘플레이트: 직선 보간
+    const ratio = inRate / info.sampleRate;
+    const outN = Math.max(1, Math.round(n / ratio));
+    const out = new Float32Array(outN * outCh);
+    for (let c = 0; c < outCh; c++) {
+      const s = src[c], base = c * outN;
+      for (let i = 0; i < outN; i++) {
+        const x = i * ratio, x0 = Math.min(n - 1, Math.floor(x)), x1 = Math.min(n - 1, x0 + 1), f = x - Math.floor(x);
+        out[base + i] = s[x0] * (1 - f) + s[x1] * f;
+      }
+    }
+    return new AudioData({ format: 'f32-planar', sampleRate: info.sampleRate, numberOfFrames: outN, numberOfChannels: outCh,
+                           timestamp: data.timestamp, data: out });
+  }
+
+  // 압축기에 남은 소리 꺼내기
   async function flushAudio() {
     const enc = aEncoder;
     if (!enc || enc.state !== 'configured') return;
@@ -462,7 +506,7 @@
         output: (chunk, meta) => onAudioChunk(chunk, meta, info, my),
         // 실패하면 그 방식은 빼고 다음 방식으로 재시도 (이미 담긴 소리는 형식이 달라 비움)
         error: () => {
-          if (my !== session) return;
+          if (my !== session || enc !== aEncoder) return;
           audioFailed.add(c.kind);
           for (const a of aChunks) bufferBytes -= a.data.length;
           aChunks = [];
@@ -858,6 +902,10 @@
     if (msg && msg.type === 'snapshot-release') {
       const snap = snapshots.get(msg.session);
       if (snap) { clearTimeout(snap.timer); snapshots.delete(msg.session); }
+      sendResponse({ ok: true });
+      return;
+    }
+    if (msg && msg.type === 'ping') {
       sendResponse({ ok: true });
       return;
     }

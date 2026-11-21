@@ -70,7 +70,7 @@
     });
     try {
       dec.configure(cfg);
-      // 압축 해제기는 빈 구간을 무시하고 시각을 이어 붙이므로, 시각이 끊기는 곳에서 flush해 다시 맞춤
+      // 시각이 끊기는 곳에서 flush (압축 해제기는 빈 구간을 무시함)
       const frameUs = a.kind === 'aac' ? 1024 / a.sampleRate * 1e6 : 20000;
       let expect = null;
       for (const s of track.a) {
