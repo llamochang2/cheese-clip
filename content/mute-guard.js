@@ -63,13 +63,24 @@
     document.dispatchEvent(new CustomEvent('chzzk-clip-tab-mute', { detail: !!muted }));
   }
 
+  // 플레이어가 보는 값이 바뀌었는데 실제 영상 값은 그대로면 volumechange가 일어나지 않아
+  // 플레이어의 음소거 아이콘이 갱신되지 않음 → 직접 알림
+  function change(el, fn) {
+    const s = ensure(el);
+    const seen0 = s.muted + ':' + s.volume, real0 = realMuted(el) + ':' + realVolume(el);
+    fn(s);
+    apply(el);
+    if (s.muted + ':' + s.volume !== seen0 && realMuted(el) + ':' + realVolume(el) === real0) {
+      el.dispatchEvent(new Event('volumechange'));
+    }
+  }
+
   Object.defineProperty(P, 'muted', {
     configurable: true, enumerable: dM.enumerable,
     get() { const s = isTarget(this) && st.get(this); return s ? s.muted : realMuted(this); },
     set(v) {
       if (!isTarget(this)) return dM.set.call(this, v);
-      ensure(this).muted = !!v;
-      apply(this);
+      change(this, s => { s.muted = !!v; });
     }
   });
   Object.defineProperty(P, 'volume', {
@@ -79,8 +90,7 @@
       if (!isTarget(this)) return dV.set.call(this, v);
       const n = Number(v);
       if (!(n >= 0 && n <= 1)) return dV.set.call(this, v); // 잘못된 값은 원래 동작(오류)대로
-      ensure(this).volume = n;
-      apply(this);
+      change(this, s => { s.volume = n; });
     }
   });
 

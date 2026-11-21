@@ -32,6 +32,9 @@
   // 영상·소리 시계 차이: (도착 시각 − 타임스탬프)의 최솟값
   let vOff = Infinity, aOff = Infinity;
   let aRaw = NaN; // 가장 최근 소리의 (도착 시각 − 타임스탬프), 조각마다 기록해 저장 시 구간별로 다시 계산
+  // 소리 압축기는 입력 사이의 빈 구간을 무시하고 시각을 이어 붙이므로, 입력별 원래 시각을 기록해 되돌림
+  //   { enc: 압축기 기준 시작 시각, ts: 원래 시각, raw: 도착 시각 − 원래 시각 }
+  let aMap = [], aMapBase = null, aMapFrames = 0, aMapRate = 0;
   let wasPaused = false;
   let problem = null;                   // 실패 이유
   let canvas = null, ctx = null;
@@ -421,6 +424,9 @@
     const off = performance.now() * 1000 - data.timestamp;
     aRaw = off;
     if (!Number.isFinite(aOff) || off < aOff) aOff = off; // 버퍼 정리용 대략값
+    if (aMapBase === null) { aMapBase = data.timestamp; aMapFrames = 0; aMapRate = data.sampleRate; }
+    aMap.push({ enc: aMapBase + Math.round(aMapFrames * 1e6 / aMapRate), ts: data.timestamp, raw: off });
+    aMapFrames += data.numberOfFrames;
     aEncoder.encode(data);
   }
 
@@ -452,6 +458,7 @@
         }
       });
       enc.configure(cfg);
+      aMap = []; aMapBase = null;
       aEncoder = enc;
       aInfo = info;
       return;
@@ -464,10 +471,16 @@
     if (meta && meta.decoderConfig && meta.decoderConfig.description) {
       info.description = toU8(meta.decoderConfig.description);
     }
+    // 압축기 시각 → 원래 시각
+    const e = chunk.timestamp;
+    while (aMap.length > 1 && aMap[1].enc <= e + 1000) aMap.shift();
+    const m = aMap[0];
+    const timestamp = m ? m.ts + (e - m.enc) : e;
+    const raw = m ? m.raw : (Number.isFinite(aRaw) ? aRaw : aOff);
     if (!vChunks.length) return;
     const data = new Uint8Array(chunk.byteLength);
     chunk.copyTo(data);
-    aChunks.push({ data, timestamp: chunk.timestamp, duration: chunk.duration || 0, off: aOff, raw: Number.isFinite(aRaw) ? aRaw : aOff });
+    aChunks.push({ data, timestamp, duration: chunk.duration || 0, off: aOff, raw });
     bufferBytes += data.length;
   }
 
